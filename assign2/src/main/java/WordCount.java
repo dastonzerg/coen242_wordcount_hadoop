@@ -32,12 +32,19 @@ public class WordCount {
 
     public static class TopNReducer
             extends Reducer<Text,IntWritable,Text,IntWritable> {
-
+        // data structures
         private Map<String, Integer> cntMap=new HashMap<>();
-        private PriorityQueue<String> minHeap=new PriorityQueue<>(
-                (o1, o2)->!cntMap.get(o1).equals(cntMap.get(o2))
-                        ?Integer.compare(cntMap.get(o1), cntMap.get(o2))
-                        :o2.compareTo(o1));
+        private Comparator<String> heapComparator=new Comparator<String>() {
+            @Override
+            public int compare(String o1, String o2) {
+                if(!cntMap.get(o1).equals(cntMap.get(o2))) {
+                    return Integer.compare(cntMap.get(o1), cntMap.get(o2));
+                }
+                return o2.compareTo(o1);
+            }
+        };
+        private PriorityQueue<String> minHeap=new PriorityQueue<>(100, heapComparator);
+
         @Override
         public void reduce(Text key, Iterable<IntWritable> values,
                            Context context
@@ -82,7 +89,6 @@ public class WordCount {
         job.setReducerClass(TopNReducer.class);
         job.setOutputKeyClass(Text.class);
         job.setOutputValueClass(IntWritable.class);
-        job.setNumReduceTasks(100);
         FileInputFormat.addInputPath(job, new Path(args[0]));
         FileOutputFormat.setOutputPath(job, new Path(args[1]));
         boolean success=job.waitForCompletion(true);
