@@ -13,6 +13,15 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 
 
 public class WordCount {
+    private static class WordCntPair {
+        String word;
+        int cnt;
+        WordCntPair(String _word, int _cnt) {
+            word=_word;
+            cnt=_cnt;
+        }
+    }
+
     public static class TokenizerMapper
             extends Mapper<Object, Text, Text, IntWritable> {
 
@@ -33,46 +42,49 @@ public class WordCount {
     public static class TopNReducer
             extends Reducer<Text,IntWritable,Text,IntWritable> {
         // data structures
-        private Map<String, Integer> cntMap=new HashMap<>();
-        private Comparator<String> heapComparator=new Comparator<String>() {
+        private Comparator<WordCntPair> comparator =new Comparator<WordCntPair>() {
             @Override
-            public int compare(String o1, String o2) {
-                if(!cntMap.get(o1).equals(cntMap.get(o2))) {
-                    return Integer.compare(cntMap.get(o1), cntMap.get(o2));
+            public int compare(WordCntPair o1, WordCntPair o2) {
+                if(o1.cnt!=o2.cnt) {
+                    return Integer.compare(o1.cnt, o2.cnt);
                 }
-                return o2.compareTo(o1);
+                return o2.word.compareTo(o1.word);
             }
         };
-        private PriorityQueue<String> minHeap=new PriorityQueue<>(100, heapComparator);
+        private Map<String, Integer> cntMap=new HashMap<>();
+        private PriorityQueue<WordCntPair> minHeap=new PriorityQueue<>(100, comparator);
 
         @Override
         public void reduce(Text key, Iterable<IntWritable> values,
-                           Context context
-        ) throws IOException, InterruptedException {
+                           Context context) throws IOException, InterruptedException {
             int sum = 0;
             for (IntWritable val : values) {
                 sum += val.get();
             }
-            cntMap.put(key.toString(), sum);
-            minHeap.add(key.toString());
-            if(minHeap.size()>100) {
-                String removed=minHeap.poll();
-                cntMap.remove(removed);
+            if(!cntMap.containsKey(key.toString())) {
+                cntMap.put(key.toString(), sum);
+            }
+            else {
+                cntMap.put(key.toString(), cntMap.get(key.toString())+sum);
             }
         }
 
         @Override
         protected void cleanup(Context context)
                 throws IOException, InterruptedException {
+            for(Map.Entry<String, Integer> entry:cntMap.entrySet()) {
+                minHeap.add(new WordCntPair(entry.getKey(), entry.getValue()));
+                if(minHeap.size()>100) {
+                    minHeap.poll();
+                }
+            }
+
             Text tempText=new Text();
             IntWritable cntWrite=new IntWritable();
-            List<String> tempLst=new ArrayList<>();
             while(!minHeap.isEmpty()) {
-                tempLst.add(minHeap.poll());
-            }
-            for(String word:tempLst) {
-                tempText.set(word);
-                cntWrite.set(cntMap.get(word));
+                WordCntPair pair=minHeap.poll();
+                tempText.set(pair.word);
+                cntWrite.set(pair.cnt);
                 context.write(tempText, cntWrite);
             }
         }
@@ -89,6 +101,9 @@ public class WordCount {
         job.setReducerClass(TopNReducer.class);
         job.setOutputKeyClass(Text.class);
         job.setOutputValueClass(IntWritable.class);
+        conf.set("mapreduce.input.fileinputformat.split.maxsize", "100");
+        conf.set("mapreduce.input.fileinputformat.split.minsize", "100");
+        job.setNumReduceTasks(10);
         FileInputFormat.addInputPath(job, new Path(args[0]));
         FileOutputFormat.setOutputPath(job, new Path(args[1]));
         boolean success=job.waitForCompletion(true);
