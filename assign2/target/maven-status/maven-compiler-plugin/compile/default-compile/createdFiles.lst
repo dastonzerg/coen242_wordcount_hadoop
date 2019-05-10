@@ -1,3 +1,8 @@
 WordCount$TopNReducer.class
 WordCount$TopNReducer$1.class
+WordCount$TopNMapper.class
+WordCount$CollectReducer$1.class
 WordCount$WordCntPair.class
+WordCount$CollectMapper$1.class
+WordCount$CollectMapper.class
+WordCount$CollectReducer.class
