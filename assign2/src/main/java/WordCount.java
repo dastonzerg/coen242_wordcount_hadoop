@@ -14,7 +14,6 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.input.KeyValueTextInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 
-
 public class WordCount {
     private static class WordCntPair {
         String word;
@@ -34,7 +33,7 @@ public class WordCount {
         @Override
         public void map(Object key, Text value, Context context
         ) throws IOException, InterruptedException {
-            StringTokenizer itr = new StringTokenizer(value.toString(), "[ +\n]");
+            StringTokenizer itr = new StringTokenizer(value.toString());
             while (itr.hasMoreTokens()) {
                 word.set(itr.nextToken());
                 context.write(word, one);
@@ -76,19 +75,7 @@ public class WordCount {
         protected void cleanup(Context context)
                 throws IOException, InterruptedException {
             for(Map.Entry<String, Integer> entry:cntMap.entrySet()) {
-                minHeap.add(new WordCntPair(entry.getKey(), entry.getValue()));
-                if(minHeap.size()>100) {
-                    minHeap.poll();
-                }
-            }
-
-            Text tempText=new Text();
-            IntWritable cntWrite=new IntWritable();
-            while(!minHeap.isEmpty()) {
-                WordCntPair pair=minHeap.poll();
-                tempText.set(pair.word);
-                cntWrite.set(pair.cnt);
-                context.write(tempText, cntWrite);
+                context.write(new Text(entry.getKey()), new IntWritable(entry.getValue()));
             }
         }
     }
@@ -176,9 +163,6 @@ public class WordCount {
     public static void main(String[] args) throws Exception {
         long startTime=System.currentTimeMillis();
         Configuration conf = new Configuration();
-        FileSystem fs = FileSystem.get(conf);
-        Path tempPath = new Path("./temp");
-        fs.delete(tempPath, true);
         // job1
         Job job1 = Job.getInstance(conf, "top_words");
         job1.setJarByClass(WordCount.class);
@@ -188,26 +172,25 @@ public class WordCount {
         job1.setOutputKeyClass(Text.class);
         job1.setOutputValueClass(IntWritable.class);
         FileInputFormat.addInputPath(job1, new Path(args[0]));
-        FileOutputFormat.setOutputPath(job1, tempPath);
-        job1.waitForCompletion(true);
+        FileOutputFormat.setOutputPath(job1, new Path(args[1]));
+        boolean success=job1.waitForCompletion(true);
 
-        // job2
-        Job job2 = Job.getInstance(conf, "collect_words");
-        job2.setJarByClass(WordCount.class);
-        job2.setMapperClass(CollectMapper.class);
-        job2.setReducerClass(CollectReducer.class);
-        job2.setOutputKeyClass(Text.class);
-        job2.setOutputValueClass(IntWritable.class);
-        job2.setNumReduceTasks(1);
-        FileInputFormat.addInputPath(job2, tempPath);
-        FileOutputFormat.setOutputPath(job2, new Path(args[1]));
-        job2.setInputFormatClass(KeyValueTextInputFormat.class);
-        job2.setOutputFormatClass(TextOutputFormat.class);
-
-        boolean success=job2.waitForCompletion(true);
+//        // job2
+//        Job job2 = Job.getInstance(conf, "collect_words");
+//        job2.setJarByClass(WordCount.class);
+//        job2.setMapperClass(CollectMapper.class);
+//        job2.setReducerClass(CollectReducer.class);
+//        job2.setOutputKeyClass(Text.class);
+//        job2.setOutputValueClass(IntWritable.class);
+//        job2.setNumReduceTasks(1);
+//        FileInputFormat.addInputPath(job2, tempPath);
+//        FileOutputFormat.setOutputPath(job2, new Path(args[1]));
+//        job2.setInputFormatClass(KeyValueTextInputFormat.class);
+//        job2.setOutputFormatClass(TextOutputFormat.class);
+//
+//        boolean success=job2.waitForCompletion(true);
         long endTime=System.currentTimeMillis();
         System.out.printf("Total Execution Time is: %d s\n", (endTime-startTime)/1000);
-        fs.delete(tempPath, true);
         System.exit(success?0:1);
     }
 }
