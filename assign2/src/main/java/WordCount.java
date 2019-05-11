@@ -16,9 +16,9 @@ import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 
 public class WordCount {
     private static class WordCntPair {
-        String word;
-        int cnt;
-        WordCntPair(String _word, int _cnt) {
+        final Text word;
+        final IntWritable cnt;
+        WordCntPair(Text _word, IntWritable _cnt) {
             word=_word;
             cnt=_cnt;
         }
@@ -47,13 +47,13 @@ public class WordCount {
         private Comparator<WordCntPair> comparator =new Comparator<WordCntPair>() {
             @Override
             public int compare(WordCntPair o1, WordCntPair o2) {
-                if(o1.cnt!=o2.cnt) {
-                    return Integer.compare(o1.cnt, o2.cnt);
+                if(o1.cnt.get()!=o2.cnt.get()) {
+                    return Integer.compare(o1.cnt.get(), o2.cnt.get());
                 }
-                return o2.word.compareTo(o1.word);
+                return o2.word.toString().compareTo(o1.word.toString());
             }
         };
-        private Map<String, Integer> cntMap=new HashMap<>();
+        private java.util.HashMap<String, Integer> cntMap=new HashMap<>();
         private PriorityQueue<WordCntPair> minHeap=new PriorityQueue<>(100, comparator);
 
         @Override
@@ -75,90 +75,98 @@ public class WordCount {
         protected void cleanup(Context context)
                 throws IOException, InterruptedException {
             for(Map.Entry<String, Integer> entry:cntMap.entrySet()) {
-                context.write(new Text(entry.getKey()), new IntWritable(entry.getValue()));
-            }
-        }
-    }
-
-    public static class CollectMapper
-            extends Mapper<Text, Text, Text, IntWritable> {
-        private Comparator<WordCntPair> comparator =new Comparator<WordCntPair>() {
-            @Override
-            public int compare(WordCntPair o1, WordCntPair o2) {
-                if(o1.cnt!=o2.cnt) {
-                    return Integer.compare(o1.cnt, o2.cnt);
+                minHeap.add(new WordCntPair(new Text(entry.getKey()), new IntWritable(entry.getValue())));
+                if(minHeap.size()>100) {
+                    minHeap.poll();
                 }
-                return o2.word.compareTo(o1.word);
             }
-        };
-        private PriorityQueue<WordCntPair> minHeap=new PriorityQueue<>(100, comparator);
 
-        @Override
-        public void map(Text key, Text value, Context context
-        ) {
-            String word=key.toString();
-            int cnt=Integer.valueOf(value.toString());
-            minHeap.add(new WordCntPair(word, cnt));
-            if(minHeap.size()>100) {
-                minHeap.poll();
-            }
-        }
-
-        @Override
-        protected void cleanup(Context context)
-                throws IOException, InterruptedException {
-            Text tempText=new Text();
-            IntWritable cntWrite=new IntWritable();
             while(!minHeap.isEmpty()) {
                 WordCntPair pair=minHeap.poll();
-                tempText.set(pair.word);
-                cntWrite.set(pair.cnt);
-                context.write(tempText, cntWrite);
+                context.write(pair.word, pair.cnt);
             }
         }
     }
 
-    public static class CollectReducer
-            extends Reducer<Text,IntWritable,Text,IntWritable> {
-        private Comparator<WordCntPair> comparator =new Comparator<WordCntPair>() {
-            @Override
-            public int compare(WordCntPair o1, WordCntPair o2) {
-                if(o1.cnt!=o2.cnt) {
-                    return Integer.compare(o1.cnt, o2.cnt);
-                }
-                return o2.word.compareTo(o1.word);
-            }
-        };
-        private PriorityQueue<WordCntPair> minHeap=new PriorityQueue<>(100, comparator);
-
-        @Override
-        public void reduce(Text key, Iterable<IntWritable> values,
-                           Context context) {
-            String word=key.toString();
-            Iterator<IntWritable> ite=values.iterator();
-            int cnt=ite.next().get();
-            minHeap.add(new WordCntPair(word, cnt));
-            if(minHeap.size()>100) {
-                minHeap.poll();
-            }
-        }
-
-        @Override
-        protected void cleanup(Context context)
-                throws IOException, InterruptedException {
-            Text tempText=new Text();
-            IntWritable cntWrite=new IntWritable();
-            LinkedList<WordCntPair> tempLst=new LinkedList<>();
-            while(!minHeap.isEmpty()) {
-                tempLst.addFirst(minHeap.poll());
-            }
-            for(WordCntPair pair:tempLst) {
-                tempText.set(pair.word);
-                cntWrite.set(pair.cnt);
-                context.write(tempText, cntWrite);
-            }
-        }
-    }
+//    public static class CollectMapper
+//            extends Mapper<Text, Text, Text, IntWritable> {
+//        private Comparator<WordCntPair> comparator =new Comparator<WordCntPair>() {
+//            @Override
+//            public int compare(WordCntPair o1, WordCntPair o2) {
+//                if(o1.cnt!=o2.cnt) {
+//                    return Integer.compare(o1.cnt, o2.cnt);
+//                }
+//                return o2.word.compareTo(o1.word);
+//            }
+//        };
+//        private PriorityQueue<WordCntPair> minHeap=new PriorityQueue<>(100, comparator);
+//
+//        @Override
+//        public void map(Text key, Text value, Context context
+//        ) {
+//            String word=key.toString();
+//            int cnt=Integer.valueOf(value.toString());
+//            minHeap.add(new WordCntPair(word, cnt));
+//            if(minHeap.size()>100) {
+//                minHeap.poll();
+//            }
+//        }
+//
+//        @Override
+//        protected void cleanup(Context context)
+//                throws IOException, InterruptedException {
+//            Text tempText=new Text();
+//            IntWritable cntWrite=new IntWritable();
+//            while(!minHeap.isEmpty()) {
+//                WordCntPair pair=minHeap.poll();
+//                tempText.set(pair.word);
+//                cntWrite.set(pair.cnt);
+//                context.write(tempText, cntWrite);
+//            }
+//        }
+//    }
+//
+//    public static class CollectReducer
+//            extends Reducer<Text,IntWritable,Text,IntWritable> {
+//        private Comparator<WordCntPair> comparator =new Comparator<WordCntPair>() {
+//            @Override
+//            public int compare(WordCntPair o1, WordCntPair o2) {
+//                if(o1.cnt!=o2.cnt) {
+//                    return Integer.compare(o1.cnt, o2.cnt);
+//                }
+//                return o2.word.compareTo(o1.word);
+//            }
+//        };
+//        private PriorityQueue<WordCntPair> minHeap=new PriorityQueue<>(100, comparator);
+//
+//        @Override
+//        public void reduce(Text key, Iterable<IntWritable> values,
+//                           Context context) {
+//            String word=key.toString();
+//            Iterator<IntWritable> ite=values.iterator();
+//            int cnt=ite.next().get();
+//            minHeap.add(new WordCntPair(word, cnt));
+//            if(minHeap.size()>100) {
+//                minHeap.poll();
+//            }
+//        }
+//
+//        @Override
+//        protected void cleanup(Context context)
+//                throws IOException, InterruptedException {
+//            Text tempText=new Text();
+//            IntWritable cntWrite=new IntWritable();
+//            LinkedList<WordCntPair> tempLst=new LinkedList<>();
+//            while(!minHeap.isEmpty()) {
+//                tempLst.addFirst(minHeap.poll());
+//            }
+//            for(WordCntPair pair:tempLst) {
+//                tempText.set(pair.word);
+//                cntWrite.set(pair.cnt);
+//                context.write(tempText, cntWrite);
+//            }
+//        }
+//    }
 
     public static void main(String[] args) throws Exception {
         long startTime=System.currentTimeMillis();
