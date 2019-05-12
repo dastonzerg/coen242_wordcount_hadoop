@@ -25,6 +25,7 @@ public class WordCount {
         }
     }
 
+    // job1 Mapper Counting Chunk
     public static class TopNMapper
             extends Mapper<Object, Text, Text, IntWritable> {
 
@@ -37,15 +38,21 @@ public class WordCount {
             StringTokenizer itr = new StringTokenizer(value.toString());
             while (itr.hasMoreTokens()) {
                 String str=itr.nextToken();
-                if(str.length()<=3) {
+                if(str.length()<=0) {
                     continue;
                 }
+                // replace the if statement above if wants to do
+                // len>3
+//                if(str.length()<=3) {
+//                    continue;
+//                }
                 word.set(str);
                 context.write(word, one);
             }
         }
     }
 
+    // job1 Reducer merging the freq for each word
     public static class TopNReducer
             extends Reducer<Text,IntWritable,Text,IntWritable> {
         // data structures
@@ -75,6 +82,8 @@ public class WordCount {
             }
         }
 
+        // job1 Reducer cleanup uses a pq to filter the (Word, Count) pair and get
+        // the top 100 pairs
         @Override
         protected void cleanup(Context context)
                 throws IOException, InterruptedException {
@@ -85,17 +94,14 @@ public class WordCount {
                 }
             }
 
-            Text tempText=new Text();
-            IntWritable cntWrite=new IntWritable();
             while(!minHeap.isEmpty()) {
                 WordCntPair pair=minHeap.poll();
-                tempText.set(pair.word);
-                cntWrite.set(pair.cnt);
-                context.write(tempText, cntWrite);
+                context.write(new Text(pair.word), new IntWritable(pair.cnt));
             }
         }
     }
 
+    // job2 Mapper will filter and get the top 100 pairs again
     public static class CollectMapper
             extends Mapper<Text, Text, Text, IntWritable> {
         private PriorityQueue<WordCntPair> minHeap=new PriorityQueue<>(100, new Comparator<WordCntPair>() {
@@ -122,17 +128,15 @@ public class WordCount {
         @Override
         protected void cleanup(Context context)
                 throws IOException, InterruptedException {
-            Text tempText=new Text();
-            IntWritable cntWrite=new IntWritable();
             while(!minHeap.isEmpty()) {
                 WordCntPair pair=minHeap.poll();
-                tempText.set(pair.word);
-                cntWrite.set(pair.cnt);
-                context.write(tempText, cntWrite);
+                context.write(new Text(pair.word), new IntWritable(pair.cnt));
             }
         }
     }
 
+    // job2 Reducer will finally filter the resulting pairs from last stage and get the
+    // overall top 100 pairs.
     public static class CollectReducer
             extends Reducer<Text,IntWritable,Text,IntWritable> {
         private PriorityQueue<WordCntPair> minHeap=new PriorityQueue<>(100, new Comparator<WordCntPair>() {
@@ -160,16 +164,12 @@ public class WordCount {
         @Override
         protected void cleanup(Context context)
                 throws IOException, InterruptedException {
-            Text tempText=new Text();
-            IntWritable cntWrite=new IntWritable();
             LinkedList<WordCntPair> tempLst=new LinkedList<>();
             while(!minHeap.isEmpty()) {
                 tempLst.addFirst(minHeap.poll());
             }
             for(WordCntPair pair:tempLst) {
-                tempText.set(pair.word);
-                cntWrite.set(pair.cnt);
-                context.write(tempText, cntWrite);
+                context.write(new Text(pair.word), new IntWritable(pair.cnt));
             }
         }
     }
@@ -177,6 +177,7 @@ public class WordCount {
     public static void main(String[] args) throws Exception {
         long startTime=System.currentTimeMillis();
         Configuration conf = new Configuration();
+        conf.set("mapreduce.reduce.shuffle.input.buffer.percent", "0.6");
         FileSystem fs = FileSystem.get(conf);
         Path tempPath = new Path("./temp");
         fs.delete(tempPath, true);
@@ -188,6 +189,7 @@ public class WordCount {
         job1.setReducerClass(TopNReducer.class);
         job1.setOutputKeyClass(Text.class);
         job1.setOutputValueClass(IntWritable.class);
+        job1.setNumReduceTasks(250);
         FileInputFormat.addInputPath(job1, new Path(args[0]));
         FileOutputFormat.setOutputPath(job1, tempPath);
         job1.waitForCompletion(true);
