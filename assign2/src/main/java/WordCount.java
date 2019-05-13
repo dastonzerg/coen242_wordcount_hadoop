@@ -5,6 +5,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
@@ -103,7 +104,7 @@ public class WordCount {
 
     // job2 Mapper will filter and get the top 100 pairs again
     public static class CollectMapper
-            extends Mapper<Text, Text, Text, IntWritable> {
+            extends Mapper<LongWritable, Text, Text, IntWritable> {
         private PriorityQueue<WordCntPair> minHeap=new PriorityQueue<>(100, new Comparator<WordCntPair>() {
             @Override
             public int compare(WordCntPair o1, WordCntPair o2) {
@@ -115,11 +116,10 @@ public class WordCount {
         });
 
         @Override
-        public void map(Text key, Text value, Context context
+        public void map(LongWritable key, Text value, Context context
         ) {
-            String word=key.toString();
-            int cnt=Integer.valueOf(value.toString());
-            minHeap.add(new WordCntPair(word, cnt));
+            String[] strs=value.toString().split("\t");
+            minHeap.add(new WordCntPair(strs[0], Integer.valueOf(strs[1])));
             if(minHeap.size()>100) {
                 minHeap.poll();
             }
